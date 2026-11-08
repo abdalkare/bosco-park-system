@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 1. الاتصال بقاعدة البيانات مع تنظيف الرابط من أي مسافات أو رموز زائدة
+// 1. الاتصال بقاعدة البيانات مع تنظيف الرابط
 const rawUri = process.env.MONGO_URI || "";
 const mongoURI = rawUri.trim().replace(/^["'](.+)["']$/, '$1');
 
@@ -18,11 +18,12 @@ mongoose.connect(mongoURI)
     .then(() => console.log("✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح"))
     .catch(err => console.error("❌ خطأ حرج في اتصال قاعدة البيانات:", err));
 
-// 2. إعداد عميل الواتساب بدون مسار ثابت لكروم (ليكتشفه النظام تلقائياً من البناء)
+// 2. إعداد عميل الواتساب مع مسار كروم المباشر والثابت على سحابة Render
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
+        executablePath: '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.31/chrome-linux64/chrome',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox', 
