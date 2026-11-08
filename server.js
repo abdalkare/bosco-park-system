@@ -18,12 +18,11 @@ mongoose.connect(mongoURI)
     .then(() => console.log("✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح"))
     .catch(err => console.error("❌ خطأ حرج في اتصال قاعدة البيانات:", err));
 
-// 2. إعداد عميل الواتساب مع مسار كروم السحابي على Render
+// 2. إعداد عميل الواتساب بدون مسار ثابت لكروم (ليكتشفه النظام تلقائياً من البناء)
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/render/.cache/puppeteer/chrome/linux-146.0.7680.31/chrome-linux64/chrome',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox', 
