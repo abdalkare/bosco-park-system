@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 1. الاتصال بقاعدة البيانات MongoDB
+// الاتصال بقاعدة البيانات
 const rawUri = process.env.MONGO_URI || "";
 const mongoURI = rawUri.trim().replace(/^["'](.+)["']$/, '$1');
 
@@ -18,12 +18,11 @@ mongoose.connect(mongoURI)
     .then(() => console.log("✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح"))
     .catch(err => console.error("❌ خطأ اتصال قاعدة البيانات:", err));
 
-// 2. نماذج البيانات (Database Schemas)
+// النماذج
 const UserSchema = new mongoose.Schema({
     name: String,
     phone: { type: String, unique: true },
-    role: { type: String, enum: ['admin', 'reception', 'guest'], default: 'guest' },
-    password: String
+    role: { type: String, enum: ['admin', 'reception', 'guest'], default: 'guest' }
 });
 const User = mongoose.model('User', UserSchema);
 
@@ -33,32 +32,27 @@ const BookingSchema = new mongoose.Schema({
     courtName: String,
     date: String,
     timeSlot: String,
-    status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'pending' },
+    status: { type: String, enum: ['pending', 'confirmed', 'cancelled'], default: 'confirmed' },
     createdAt: { type: Date, default: Date.now }
 });
 const Booking = mongoose.model('Booking', BookingSchema);
 
-// 3. تشغيل خدمة الواتساب
+// تشغيل الواتساب
 let qrCodeImage = '';
 let isConnected = false;
-let sockInstance = null;
 
 async function startWhatsApp() {
     try {
         const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
-        
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
             logger: pino({ level: 'silent' })
         });
-        sockInstance = sock;
 
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
-            if (qr) {
-                QRCode.toDataURL(qr, (err, url) => { if (!err) qrCodeImage = url; });
-            }
+            if (qr) QRCode.toDataURL(qr, (err, url) => { if (!err) qrCodeImage = url; });
             if (connection === 'close') {
                 isConnected = false;
                 const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -75,92 +69,90 @@ async function startWhatsApp() {
         sock.ev.on('messages.upsert', async (m) => {
             const msg = m.messages[0];
             if (!msg.message || msg.key.fromMe) return;
-
             const senderPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '');
             const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-
             const user = await User.findOne({ phone: senderPhone });
             const role = user ? user.role : 'guest';
 
-            if (role === 'admin' && text.startsWith('ادارة')) {
-                await sock.sendMessage(msg.key.remoteJid, { text: "👑 أهلاً بك في قائمة الإدارة العليا لبوسكو بارك." });
-            } else if (role === 'reception' && text.startsWith('استقبال')) {
-                await sock.sendMessage(msg.key.remoteJid, { text: "📋 أهلاً بك في قائمة الاستقبال." });
+            if (role === 'admin' && text.includes('ادارة')) {
+                await sock.sendMessage(msg.key.remoteJid, { text: "👑 أهلاً بك يا مدير النظام في لوحة تحكم بوسكو بارك." });
             } else {
-                await sock.sendMessage(msg.key.remoteJid, { text: "⚽ أهلاً بك في مجمع بوسكو بارك الرياضي!" });
+                await sock.sendMessage(msg.key.remoteJid, { text: "⚽ أهلاً بك في مجمع بوسكو بارك الرياضي! يسعدنا خدمتكم." });
             }
         });
-
     } catch (err) {
         console.error("❌ خطأ في الواتساب:", err.message);
     }
 }
 startWhatsApp();
 
-// 4. واجهات النظام والمسارات المنفصلة
+// القالب المشترك لتصميم عصري ومرتب (CSS احترافي)
+const layout = (title, content) => `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title} | Bosco Park</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Cairo', sans-serif; }
+        body { background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { background: #1e293b; width: 100%; max-width: 900px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); padding: 40px; border: 1px solid #334155; }
+        h1, h2 { color: #38bdf8; margin-bottom: 15px; font-weight: 700; }
+        p { color: #94a3b8; margin-bottom: 25px; line-height: 1.6; }
+        .btn { display: inline-block; padding: 12px 24px; background: #0284c7; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.3s ease; border: none; cursor: pointer; }
+        .btn:hover { background: #0369a1; transform: translateY(-2px); }
+        .btn-admin { background: #e11d48; }
+        .btn-admin:hover { background: #be123c; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: #0f172a; padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; }
+        .card h3 { color: #94a3b8; font-size: 14px; margin-bottom: 10px; }
+        .card .number { font-size: 28px; font-weight: 700; color: #38bdf8; }
+        input, select { width: 100%; padding: 12px; margin-bottom: 15px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; }
+        input:focus, select:focus { outline: none; border-color: #38bdf8; }
+        ul { list-style: none; }
+        li { background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .nav-links { display: flex; gap: 15px; margin-top: 25px; }
+        .back-link { display: inline-block; margin-top: 20px; color: #94a3b8; text-decoration: none; font-size: 14px; }
+        .back-link:hover { color: #38bdf8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        ${content}
+    </div>
+</body>
+</html>
+`;
+
+// الواجهة الرئيسية
 app.get('/', (req, res) => {
     if (!isConnected && qrCodeImage) {
-        return res.send(`
-            <div style="text-align:center; font-family:Tahoma; margin-top:40px;">
-                <h2>📷 ربط الواتساب بالنظام</h2>
-                <img src="${qrCodeImage}" style="width:300px; border:2px solid #ccc; border-radius:10px;" />
-                <p>امسح الرمز من الواتساب لتشغيل النظام.</p>
+        return res.send(layout("ربط النظام", `
+            <div style="text-align: center;">
+                <h2>ربط واتساب مجمع بوسكو بارك</h2>
+                <p>امسح رمز الاستجابة السريعة (QR Code) أدناه لتفعيل النظام الآلي فوراً.</p>
+                <img src="${qrCodeImage}" style="width: 260px; height: 260px; border-radius: 12px; padding: 10px; background: #fff; margin-bottom: 20px;" />
             </div>
-        `);
+        `));
     }
-    res.send(`
-        <div style="text-align:center; font-family:Tahoma; margin-top:50px; background:#f8f9fa; padding:40px;">
-            <h1 style="color:#28a745;">⚽ بوابة بوسكو بارك الرياضي</h1>
-            <p style="font-size:18px;">مرحباً بكم في المجمع الرياضي - حجز الملاعب والخدمات الرياضية</p>
-            <hr style="width:50%; margin:20px auto;" />
-            <div style="margin-top:30px;">
-                <a href="/reception" style="padding:12px 25px; background:#007bff; color:#fff; text-decoration:none; border-radius:5px; font-weight:bold; margin:10px;">منظومة الاستقبال 📋</a>
-                <a href="/admin" style="padding:12px 25px; background:#343a40; color:#fff; text-decoration:none; border-radius:5px; font-weight:bold; margin:10px;">لوحة الإدارة العليا 🔐</a>
-            </div>
+
+    res.send(layout("بوابة بوسكو بارك", `
+        <h1>⚽ مجمع بوسكو بارك الرياضي</h1>
+        <p>النظام الذكي المتكامل لإدارة الملاعب والعمليات اليومية بسلاسة واحترافية عالية.</p>
+        <hr style="border: 0; border-top: 1px solid #334155; margin: 25px 0;">
+        <div class="nav-links">
+            <a href="/reception" class="btn">لوحة تحكم التشغيل والاستقبال 📋</a>
+            <a href="/admin" class="btn btn-admin">إدارة المنشأة والصلاحيات 🔐</a>
         </div>
-    `);
+    `));
 });
 
+// لوحة التشغيل والاستقبال
 app.get('/reception', async (req, res) => {
     const bookings = await Booking.find().sort({ createdAt: -1 }).limit(10);
-    let listHtml = bookings.map(b => `<li><b>${b.customerName}</b> - ${b.courtName} (${b.timeSlot}) - <span style="color:blue">${b.status}</span></li>`).join('');
-
-    res.send(`
-        <div style="font-family:Tahoma; padding:30px; max-width:800px; margin:auto;">
-            <h2 style="color:#007bff; border-bottom:2px solid #007bff; padding-bottom:10px;">📋 منظومة الاستقبال وحجوزات الملاعب</h2>
-            <p>مخصص لموظفي الاستقبال لتسجيل الحجوزات المباشرة وتأكيد الحضور.</p>
-            <h3>أحدث الحجوزات:</h3>
-            <ul>${listHtml || 'لا توجد حجوزات مسجلة حالياً.'}</ul>
-            <br/>
-            <a href="/" style="color:#6c757d;">⬅ العودة للرئيسية</a>
-        </div>
-    `);
-});
-
-app.get('/admin', async (req, res) => {
-    const usersCount = await User.countDocuments();
-    const bookingsCount = await Booking.countDocuments();
-
-    res.send(`
-        <div style="font-family:Tahoma; padding:30px; max-width:800px; margin:auto; background:#fff3cd; border-radius:10px;">
-            <h2 style="color:#dc3545; border-bottom:2px solid #dc3545; padding-bottom:10px;">🔐 لوحة تحكم الإدارة العليا</h2>
-            <p>مخصص للمدير التنفيذي للتحكم بالصلاحيات والإحصائيات المالية.</p>
-            <div style="display:flex; gap:20px; margin:20px 0;">
-                <div style="background:#fff; padding:15px; border-radius:8px; border:1px solid #ccc; flex:1;">
-                    <h3>إجمالي المستخدمين</h3>
-                    <p style="font-size:24px; font-weight:bold;">${usersCount}</p>
-                </div>
-                <div style="background:#fff; padding:15px; border-radius:8px; border:1px solid #ccc; flex:1;">
-                    <h3>إجمالي الحجوزات</h3>
-                    <p style="font-size:24px; font-weight:bold;">${bookingsCount}</p>
-                </div>
-            </div>
-            <br/>
-            <a href="/" style="color:#6c757d;">⬅ العودة للرئيسية</a>
-        </div>
-    `);
-});
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port: ${PORT}`);
-});
+    const listHtml = bookings.length ? bookings.map(b => `
+        <li>
+            <div>
+                <strong style="color: #f8fafc; font-size: 16px;">
