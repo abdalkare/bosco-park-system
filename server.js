@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- 1. الاتصال بقاعدة البيانات MongoDB ---
+// 1. الاتصال بقاعدة البيانات MongoDB
 const rawUri = process.env.MONGO_URI || "";
 const mongoURI = rawUri.trim().replace(/^["'](.+)["']$/, '$1');
 
@@ -18,18 +18,15 @@ mongoose.connect(mongoURI)
     .then(() => console.log("✅ تم الاتصال بقاعدة البيانات MongoDB بنجاح"))
     .catch(err => console.error("❌ خطأ اتصال قاعدة البيانات:", err));
 
-// --- 2. نماذج البيانات (Database Schemas) ---
-
-// نموذج المستخدمين والصلاحيات
+// 2. نماذج البيانات (Database Schemas)
 const UserSchema = new mongoose.Schema({
     name: String,
     phone: { type: String, unique: true },
     role: { type: String, enum: ['admin', 'reception', 'guest'], default: 'guest' },
-    password: String // لوحات التحكم
+    password: String
 });
 const User = mongoose.model('User', UserSchema);
 
-// نموذج الملاعب والحجوزات
 const BookingSchema = new mongoose.Schema({
     customerName: String,
     customerPhone: String,
@@ -41,7 +38,7 @@ const BookingSchema = new mongoose.Schema({
 });
 const Booking = mongoose.model('Booking', BookingSchema);
 
-// --- 3. تشغيل خدمة الواتساب بالصلاحيات ---
+// 3. تشغيل خدمة الواتساب
 let qrCodeImage = '';
 let isConnected = false;
 let sockInstance = null;
@@ -75,7 +72,6 @@ async function startWhatsApp() {
 
         sock.ev.on('creds.update', saveCreds);
 
-        // معالجة الرسائل الواردة بناءً على الصلاحيات
         sock.ev.on('messages.upsert', async (m) => {
             const msg = m.messages[0];
             if (!msg.message || msg.key.fromMe) return;
@@ -83,16 +79,15 @@ async function startWhatsApp() {
             const senderPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '');
             const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
 
-            // التحقق من صلاحية الرقم في قاعدة البيانات
             const user = await User.findOne({ phone: senderPhone });
             const role = user ? user.role : 'guest';
 
             if (role === 'admin' && text.startsWith('ادارة')) {
-                await sock.sendMessage(msg.key.remoteJid, { text: "👑 أهلاً بك في قائمة الإدارة العليا لبوسكو بارك.\n1. تقرير اليوم\n2. تعديل أسعار الملاعب" });
+                await sock.sendMessage(msg.key.remoteJid, { text: "👑 أهلاً بك في قائمة الإدارة العليا لبوسكو بارك." });
             } else if (role === 'reception' && text.startsWith('استقبال')) {
-                await sock.sendMessage(msg.key.remoteJid, { text: "📋 أهلاً بك في قائمة الاستقبال.\n1. تأكيد حجز\n2. الملاعب المتاحة اليوم" });
+                await sock.sendMessage(msg.key.remoteJid, { text: "📋 أهلاً بك في قائمة الاستقبال." });
             } else {
-                await sock.sendMessage(msg.key.remoteJid, { text: "⚽ أهلاً بك في mجمع بوسكو بارك الرياضي!\nلحجز ملعب أو الاستفسار عن المواعيد، يرجى زيارة موقعنا أو التواصل مع الاستقبال." });
+                await sock.sendMessage(msg.key.remoteJid, { text: "⚽ أهلاً بك في مجمع بوسكو بارك الرياضي!" });
             }
         });
 
@@ -102,9 +97,7 @@ async function startWhatsApp() {
 }
 startWhatsApp();
 
-// --- 4. واجهات النظام والمسارات المنفصلة ---
-
-// صفحة ربط الـ QR والموقع العام للضيوف
+// 4. واجهات النظام والمسارات المنفصلة
 app.get('/', (req, res) => {
     if (!isConnected && qrCodeImage) {
         return res.send(`
@@ -128,10 +121,46 @@ app.get('/', (req, res) => {
     `);
 });
 
-// منظومة الاستقبال (Reception Dashboard)
 app.get('/reception', async (req, res) => {
     const bookings = await Booking.find().sort({ createdAt: -1 }).limit(10);
     let listHtml = bookings.map(b => `<li><b>${b.customerName}</b> - ${b.courtName} (${b.timeSlot}) - <span style="color:blue">${b.status}</span></li>`).join('');
 
     res.send(`
-        <div style="font-family:Tahoma; padding:3
+        <div style="font-family:Tahoma; padding:30px; max-width:800px; margin:auto;">
+            <h2 style="color:#007bff; border-bottom:2px solid #007bff; padding-bottom:10px;">📋 منظومة الاستقبال وحجوزات الملاعب</h2>
+            <p>مخصص لموظفي الاستقبال لتسجيل الحجوزات المباشرة وتأكيد الحضور.</p>
+            <h3>أحدث الحجوزات:</h3>
+            <ul>${listHtml || 'لا توجد حجوزات مسجلة حالياً.'}</ul>
+            <br/>
+            <a href="/" style="color:#6c757d;">⬅ العودة للرئيسية</a>
+        </div>
+    `);
+});
+
+app.get('/admin', async (req, res) => {
+    const usersCount = await User.countDocuments();
+    const bookingsCount = await Booking.countDocuments();
+
+    res.send(`
+        <div style="font-family:Tahoma; padding:30px; max-width:800px; margin:auto; background:#fff3cd; border-radius:10px;">
+            <h2 style="color:#dc3545; border-bottom:2px solid #dc3545; padding-bottom:10px;">🔐 لوحة تحكم الإدارة العليا</h2>
+            <p>مخصص للمدير التنفيذي للتحكم بالصلاحيات والإحصائيات المالية.</p>
+            <div style="display:flex; gap:20px; margin:20px 0;">
+                <div style="background:#fff; padding:15px; border-radius:8px; border:1px solid #ccc; flex:1;">
+                    <h3>إجمالي المستخدمين</h3>
+                    <p style="font-size:24px; font-weight:bold;">${usersCount}</p>
+                </div>
+                <div style="background:#fff; padding:15px; border-radius:8px; border:1px solid #ccc; flex:1;">
+                    <h3>إجمالي الحجوزات</h3>
+                    <p style="font-size:24px; font-weight:bold;">${bookingsCount}</p>
+                </div>
+            </div>
+            <br/>
+            <a href="/" style="color:#6c757d;">⬅ العودة للرئيسية</a>
+        </div>
+    `);
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port: ${PORT}`);
+});
